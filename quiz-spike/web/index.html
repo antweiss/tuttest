@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>דמו חידון — ספייק</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>דמו חידון</h1>
+      <p class="lead">בחר נושא מהבנק, ענה על השאלות, וקבל ציון. טיוטה לבדיקה מול בעלי החומר.</p>
+      <div class="banner">
+        קובץ בנק: <code id="bank-url-hint"></code> · ניתן לעקוף עם פרמטר
+        <code>?bank=</code>
+      </div>
+
+      <div id="load-error" hidden></div>
+
+      <div id="main-views" class="views">
+        <section data-view="home" class="is-active">
+          <h2>נושאים</h2>
+          <p id="bank-meta" class="lead" style="margin-top: 0"></p>
+          <ul id="topic-list" class="topic-list"></ul>
+        </section>
+
+        <section data-view="quiz">
+          <div class="toolbar">
+            <button type="button" class="ghost" id="btn-back-quiz">← חזרה לרשימה</button>
+            <span id="quiz-progress" class="progress"></span>
+          </div>
+          <h2 id="quiz-title"></h2>
+          <div class="question-box">
+            <p id="question-text"></p>
+          </div>
+          <div id="choices" class="choices"></div>
+          <div class="nav-row">
+            <button type="button" class="primary" id="btn-next" disabled>המשך</button>
+          </div>
+        </section>
+
+        <section data-view="results">
+          <h2>סיום</h2>
+          <p class="lead" id="result-title"></p>
+          <p class="score-big" id="result-score"></p>
+          <ul id="result-detail" class="summary-list"></ul>
+          <div class="nav-row">
+            <button type="button" class="primary" id="btn-back-results">חזרה לרשימת הנושאים</button>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

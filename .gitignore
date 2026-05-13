@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+**/.venv/
+
+# OS
+.DS_Store
+
+# Local pipeline outputs (the deployed bank lives in quiz-spike/web/)
+_bmad-output/
+
+# Env
+.env
+.env.*

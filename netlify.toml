@@ -1,0 +1,4 @@
+# Static quiz demo: publish only the web folder
+[build]
+  command = "echo 'No build step'"
+  publish = "quiz-spike/web"
