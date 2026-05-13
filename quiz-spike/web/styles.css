@@ -54,14 +54,12 @@ p.lead {
   font-size: 0.95rem;
 }
 
-.banner {
-  font-size: 0.8rem;
+.banner-hint {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 0.78rem;
   color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-  margin-bottom: 1.25rem;
-  background: var(--surface);
+  line-height: 1.4;
 }
 
 .views > section {

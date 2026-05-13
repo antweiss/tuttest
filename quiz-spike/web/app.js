@@ -38,6 +38,98 @@ const state = {
   answers: [],
 };
 
+/** טביעת אצבע של הבנק — אם הקובץ מתעדכן, לא משחזרים סשן ישן */
+function bankFingerprint() {
+  const m = state.bank?.["מטא"] || {};
+  const n = m["מספר_נושאים"] ?? 0;
+  const per = m["שאלות_לכל_נושא"] ?? 0;
+  const topics = state.bank?.["נושאים"] || [];
+  let qc = 0;
+  for (const t of topics) qc += (t["שאלות"] || []).length;
+  return `${n}-${per}-${qc}`;
+}
+
+function progressStorageKey(topicId) {
+  return `quizSpike:v1:p:${encodeURIComponent(bankUrl())}:${topicId}`;
+}
+
+function resultsStorageKey() {
+  return `quizSpike:v1:r:${encodeURIComponent(bankUrl())}`;
+}
+
+function saveQuizProgress() {
+  if (!state.bank) return;
+  const topics = state.bank["נושאים"] || [];
+  const t = topics[state.topicIndex];
+  if (!t) return;
+  const hasAnswer = state.answers.some((a) => a !== undefined);
+  if (!hasAnswer && state.qIndex === 0) return;
+  const id = topicId(t, state.topicIndex);
+  try {
+    sessionStorage.setItem(
+      progressStorageKey(id),
+      JSON.stringify({
+        bankSig: bankFingerprint(),
+        topicIndex: state.topicIndex,
+        topicId: id,
+        qIndex: state.qIndex,
+        answers: state.answers,
+      }),
+    );
+  } catch (_) {
+    /* quota / private mode */
+  }
+}
+
+function loadQuizProgress(topicId) {
+  try {
+    const raw = sessionStorage.getItem(progressStorageKey(topicId));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d.bankSig !== bankFingerprint()) return null;
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+function clearQuizProgress(topicId) {
+  try {
+    sessionStorage.removeItem(progressStorageKey(topicId));
+  } catch (_) {}
+}
+
+function saveQuizResults() {
+  if (!state.bank) return;
+  const topics = state.bank["נושאים"] || [];
+  const t = topics[state.topicIndex];
+  if (!t) return;
+  const id = topicId(t, state.topicIndex);
+  try {
+    sessionStorage.setItem(
+      resultsStorageKey(),
+      JSON.stringify({
+        bankSig: bankFingerprint(),
+        topicIndex: state.topicIndex,
+        topicId: id,
+        answers: state.answers,
+      }),
+    );
+  } catch (_) {}
+}
+
+function loadQuizResults() {
+  try {
+    const raw = sessionStorage.getItem(resultsStorageKey());
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d.bankSig !== bankFingerprint()) return null;
+    return d;
+  } catch {
+    return null;
+  }
+}
+
 const els = {};
 
 function $(id) {
@@ -109,10 +201,11 @@ function startQuiz(topicIndex) {
   const topics = state.bank["נושאים"] || [];
   const t = topics[topicIndex];
   if (!t || !(t["שאלות"] || []).length) return;
+  const id = topicId(t, topicIndex);
+  clearQuizProgress(id);
   state.topicIndex = topicIndex;
   state.qIndex = 0;
   state.answers = [];
-  const id = topicId(t, topicIndex);
   setRoute("quiz", id);
   renderQuiz();
   showView("quiz");
@@ -137,10 +230,12 @@ function renderQuiz() {
     btn.addEventListener("click", () => {
       state.answers[state.qIndex] = j;
       renderQuiz();
+      saveQuizProgress();
     });
     choices.appendChild(btn);
   });
   $("btn-next").disabled = selected === undefined;
+  saveQuizProgress();
 }
 
 function nextQuestion() {
@@ -150,6 +245,9 @@ function nextQuestion() {
     state.qIndex += 1;
     renderQuiz();
   } else {
+    const tid = topicId(topics[state.topicIndex], state.topicIndex);
+    clearQuizProgress(tid);
+    saveQuizResults();
     setRoute("results");
     renderResults();
     showView("results");
@@ -204,7 +302,21 @@ function applyRoute() {
       goHome();
       return;
     }
-    if (state.topicIndex !== idx || state.answers.length === 0) {
+    const topics = state.bank["נושאים"] || [];
+    const nq = (topics[idx]["שאלות"] || []).length;
+    const saved = loadQuizProgress(topicId);
+    if (
+      saved &&
+      saved.bankSig === bankFingerprint() &&
+      saved.topicIndex === idx &&
+      Array.isArray(saved.answers) &&
+      saved.answers.length > 0
+    ) {
+      state.topicIndex = idx;
+      state.qIndex = Math.min(Math.max(0, saved.qIndex | 0), Math.max(0, nq - 1));
+      state.answers = saved.answers.slice();
+      while (state.answers.length < nq) state.answers.push(undefined);
+    } else if (state.topicIndex !== idx || state.answers.length === 0) {
       state.topicIndex = idx;
       state.qIndex = 0;
       state.answers = [];
@@ -214,6 +326,20 @@ function applyRoute() {
     return;
   }
   if (view === "results") {
+    if (state.answers.length === 0) {
+      const res = loadQuizResults();
+      if (
+        res &&
+        res.bankSig === bankFingerprint() &&
+        res.topicId &&
+        typeof res.topicIndex === "number" &&
+        Array.isArray(res.answers) &&
+        findTopicIndexById(res.topicId) >= 0
+      ) {
+        state.topicIndex = res.topicIndex;
+        state.answers = res.answers.slice();
+      }
+    }
     if (state.answers.length === 0) {
       goHome();
       return;

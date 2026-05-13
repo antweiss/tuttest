@@ -340,6 +340,120 @@ def other_topic_sentences(
     return pool
 
 
+# תפקידים מהאנלוגיה (כדורגל / חיים) — לניסוח שאלות על עקרונות
+ROLE_WORDS = ("שחקן", "פרשן", "מאמן", "מתאמן", "מאמנים", "שחקנים", "השחקן", "המאמן")
+
+
+def _roles_hint(sentence: str) -> str | None:
+    hits: list[str] = []
+    for w in ROLE_WORDS:
+        if w in sentence and w not in hits:
+            hits.append(w)
+    if not hits:
+        return None
+    if {"שחקן", "פרשן", "מאמן"}.issubset(set(hits)) or len(hits) >= 3:
+        return "שחקן, פרשן ומאמן (אנלוגיית הכדורגל)"
+    return " ו".join(hits) if len(hits) <= 3 else ", ".join(hits[:4])
+
+
+def extract_principles_from_body(body: str) -> list[str]:
+    """מחלץ כותרות עקרון / עיקרון כפי שמופיעות בטקסט."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for m in re.finditer(
+        r"(עיקרון|עקרון)\s+([\u0590-\u05FF](?:[^\n•]{0,46}[\u0590-\u05FFa-zA-Zא-ת])?)",
+        body,
+    ):
+        raw = f"{m.group(1)} {m.group(2).strip()}"
+        raw = re.sub(r"\s+", " ", raw).strip(" .-־,:;")
+        if len(raw) < 6 or len(raw) > 58:
+            continue
+        key = re.sub(r"\s+", "", raw).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(raw[:56])
+        if len(found) >= 24:
+            break
+    return found
+
+
+def _principle_norm_key(s: str) -> str:
+    t = re.sub(r"\s+", "", s)
+    return t.replace("עיקרון", "עקרון").casefold()
+
+
+def principle_lens_for_topic(topic_title: str, body: str) -> list[str]:
+    """רשימת עקרונות לסיבוב בין שאלות; אם אין — כותרת הפרק או תווית כללית."""
+    tt = topic_title.strip()
+    # פרק שמוקדס סביב עקרון יחיד — כל השאלות נשענות על כותרת הפרק (לא סיבוב על עקרונות אחרים מאותו עמוד)
+    if re.match(r"(עיקרון|עקרון)\s+", tt) and "עקרונות" not in tt:
+        return [tt[:56]]
+
+    xs = extract_principles_from_body(body)
+    if re.search(r"עיקרון|עקרון", tt):
+        if not any(_principle_norm_key(x) == _principle_norm_key(tt) for x in xs):
+            xs.insert(0, tt[:56])
+    if not xs:
+        xs = [tt[:56] if len(tt) > 3 else "העקרונות בפרק"]
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in xs:
+        k = _principle_norm_key(x)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(x)
+    return out
+
+
+def stem_principle_focused(
+    topic_title: str,
+    principle: str,
+    sentence: str,
+    q_index: int,
+) -> str:
+    """
+    שאלה מנוסחת סביב עקרון (מאפיינים, רווחים, מחירים, תפקידים) — לא 'התאמה לנושא'.
+    התשובה הנכונה נשארת משפט מהמקור.
+    """
+    p = principle[:52]
+    tshort = topic_title[:44]
+    roles = _roles_hint(sentence)
+    involvement = "מעורבות" in p or "מעורבות" in topic_title
+
+    pool: list[str] = []
+
+    if involvement or roles:
+        pool.extend(
+            [
+                f'בהקשר של «{p}» וביחס לתפקידי שחקן / פרשן / מאמן — איזו טענה מהטקסט מתארת נכון מאפיין, רווח או "מחיר" של התפקיד?',
+                f"לגבי «{p}» — איזו טענה משקפת נכון את יחסי הרווחים והעלויות בין תפקידים במצב המתואר?",
+                f"כשמנתחים את «{p}» דרך מאפייני השחקן, הפרשן והמאמן — מה נכון לפי החומר?",
+            ]
+        )
+    if roles and not involvement:
+        pool.append(
+            f'לגבי תפקידי {roles} ביחס ל«{p}» — איזו טענה תואמת את החומר?',
+        )
+
+    pool.extend(
+        [
+            f"לגבי «{p}» — איזו טענה מהטקסט משקפת נכון מאפיין, דגש או השלכה עקרונית?",
+            f"בהקשר של «{p}» — איזו טענה מתארת רווח, יתרון או תועלת שעולה מהחומר?",
+            f'לגבי «{p}» — איזו טענה נוגעת לעלות, מחיר או "מחיר תודתי" של בחירה בהתנהגות?',
+            f"מה נכון לגבי יישום או משמעות של «{p}» בפרק?",
+            f"איזו טענה מבטאת הכי טוב את רוח «{p}» כפי שהיא באה לידי ביטוי בטקסט?",
+        ]
+    )
+    if not re.search(r"עיקרון|עקרון", p):
+        pool.append(
+            f'בנושא «{tshort}» — איזו טענה נתמכת בצורה הטובה ביותר בטקסט לגבי הרעיון או העקרון המרכזי?',
+        )
+
+    return pool[q_index % len(pool)]
+
+
 def build_mcqs_for_topic(
     topic_title: str,
     topic_body: str,
@@ -357,13 +471,13 @@ def build_mcqs_for_topic(
     if len(distractor_pool) < 9:
         distractor_pool.extend(sentences[::-1])
 
+    principles = principle_lens_for_topic(topic_title, topic_body)
+
     mcqs: list[MCQ] = []
     for i in range(7):
         correct = sentences[i]
-        short_title = topic_title[:80]
-        stem = (
-            f"איזו מהבאות מתאימה ביותר לחומר בנושא «{short_title}»?"
-        )
+        principle = principles[i % len(principles)]
+        stem = stem_principle_focused(topic_title, principle, correct, i)
         wrong = rng.sample(distractor_pool, k=min(3, len(distractor_pool)))
         while len(wrong) < 3:
             wrong.append(wrong[-1] + " (חלופה)")
@@ -597,7 +711,7 @@ def main() -> None:
         "מספר_נושאים": len(topics),
         "שאלות_לכל_נושא": 7,
         "מקור_חלוקת_נושאים": topic_source,
-        "מייצר": "ספייק מקומי — היוריסטיקה v0 (פלט בעברית; נושאים לפי TOC/סימניות כשאפשר)",
+        "מייצר": "ספייק מקומי — שאלות ממוקדות עקרונות (מאפיינים/רווחים/מחירים/תפקידים); נושאים לפי TOC/סימניות כשאפשר",
     }
     payload = {"מטא": meta, "נושאים": topics_payload}
     json_path = write_json(args.out, payload)

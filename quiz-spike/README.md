@@ -29,7 +29,7 @@ Defaults: `--pdf` can be omitted if you set `QUIZ_SPIKE_PDF` to an absolute path
 ## What this proves
 
 - Text extraction and a **first-pass topic split** (heuristic, not semantic).
-- **Deterministic MCQs** grounded on extracted sentences: correct line from the topic; distractors sampled from other topics (swap when you plug in an LLM).
+- **Deterministic MCQs** grounded on extracted sentences: correct line from the topic; distractors sampled from other topics. **Question stems** are framed around **principles** (עקרון / עיקרון when detected): traits, gains, “prices”, and roles (e.g. שחקן / פרשן / מאמן) when the source sentence or principle mentions involvement — not generic “which matches the topic”.
 - **PDF artifact** suitable for an owner demo (label as draft / AI-assisted in the doc header).
 
 ## דמו ווב (בחירת נושא → חידון → ציון)
@@ -47,6 +47,8 @@ cd web && python3 -m http.server 8765
    קישור ישיר לנושא (אחרי טעינה): `#quiz/t0` (מזהים מ־`מזהה_נושא` ב־JSON).
 
 ללא שרת HTTP, `fetch` לקובץ JSON לרוב ייכשל מ־`file://` — השתמש בשרת המקומי.
+
+הדמו שומר **התקדמות ותוצאות** ב־`sessionStorage` (רענון ב־`#quiz/...` או `#results`); אם מספר הנושאים או הבנק השתנה, הסשן לא משוחזר.
 
 ### Netlify (מ־GitHub)
 
