@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import random
 import re
@@ -63,7 +64,7 @@ def _extract_page_range(doc: fitz.Document, start_0: int, end_0_inclusive: int) 
 
 def topics_from_pdf_outline(
     doc: fitz.Document,
-    max_level: int = 3,
+    max_level: int = 2,
     min_body_chars: int = 60,
 ) -> list[tuple[str, str]] | None:
     """
@@ -233,7 +234,7 @@ def topics_from_text_toc(
     raw_text: str,
     doc: fitz.Document,
     min_body_chars: int = 60,
-    max_entries: int = 60,
+    max_entries: int = 48,
 ) -> list[tuple[str, str]] | None:
     """
     מזהה בלוק 'תוכן העניינים' / 'תוכן הענינים' בטקסט; תומך ב-TOC מפוצל לשורות.
@@ -276,6 +277,54 @@ def topics_from_text_toc(
         topics.append((title, body[:50_000]))
 
     return topics if len(topics) >= 2 else None
+
+
+def merge_topics_to_max(
+    topics: list[tuple[str, str]], max_topics: int
+) -> list[tuple[str, str]]:
+    """
+    מיזוג נושאים סמוכים כדי לא לחרוג מ־max_topics (חידון קריא).
+    max_topics <= 0 — ללא מיזוג.
+    """
+    if max_topics <= 0 or len(topics) <= max_topics:
+        return topics
+    n = len(topics)
+    chunk = max(1, math.ceil(n / max_topics))
+    out: list[tuple[str, str]] = []
+    for i in range(0, n, chunk):
+        group = topics[i : i + chunk]
+        titles = [t[0] for t in group]
+        if len(group) == 1:
+            title = titles[0]
+        else:
+            title = f"{titles[0]} · עוד {len(group) - 1} פרקים"
+        body = "\n\n----\n\n".join(t[1] for t in group)
+        out.append((title[:220], body[:50_000]))
+    return out
+
+
+def resolve_topics_list(
+    doc: fitz.Document,
+    raw: str,
+    text: str,
+    *,
+    outline_max_level: int,
+    text_toc_max_entries: int,
+) -> tuple[str, list[tuple[str, str]]]:
+    """
+    אותו סדר עדיפות כמו ב-main: Outline → TOC בטקסט → פסקאות.
+    """
+    topic_source = "יוריסטיקת פסקאות (גיבוי)"
+    topics = topics_from_pdf_outline(doc, max_level=outline_max_level)
+    if topics:
+        topic_source = "סימניות PDF (Outline)"
+    else:
+        topics = topics_from_text_toc(raw, doc, max_entries=text_toc_max_entries)
+        if topics:
+            topic_source = "תוכן עניינים מהטקסט"
+        else:
+            topics = segment_topics(text)
+    return topic_source, topics
 
 
 def normalize_text(raw: str) -> str:
@@ -664,6 +713,24 @@ def main() -> None:
         default=42,
         help="זרע לבחירת מסיחים (לשחזור תוצאות)",
     )
+    ap.add_argument(
+        "--max-topics",
+        type=int,
+        default=12,
+        help="מקסימום נושאים בבנק; ממזג פרקי TOC/Outline סמוכים. 0 = ללא הגבלה.",
+    )
+    ap.add_argument(
+        "--outline-max-level",
+        type=int,
+        default=2,
+        help="עומק מקסימלי בסימניות PDF (1=ראשי בלבד, 2=תת-כותרות).",
+    )
+    ap.add_argument(
+        "--text-toc-max-entries",
+        type=int,
+        default=48,
+        help="מקסימום שורות תוכן עניינים לקרוא מהטקסט לפני חיתוך.",
+    )
     args = ap.parse_args()
     if not args.pdf:
         ap.error("יש להעביר --pdf או להגדיר QUIZ_SPIKE_PDF לנתיב הקובץ.")
@@ -676,16 +743,18 @@ def main() -> None:
     try:
         raw = extract_text_from_document(doc)
         text = normalize_text(raw)
-        topic_source = "יוריסטיקת פסקאות (גיבוי)"
-        topics = topics_from_pdf_outline(doc)
-        if topics:
-            topic_source = "סימניות PDF (Outline)"
-        else:
-            topics = topics_from_text_toc(raw, doc)
-            if topics:
-                topic_source = "תוכן עניינים מהטקסט"
-            else:
-                topics = segment_topics(text)
+        topic_source, topics = resolve_topics_list(
+            doc,
+            raw,
+            text,
+            outline_max_level=args.outline_max_level,
+            text_toc_max_entries=args.text_toc_max_entries,
+        )
+        n_before = len(topics)
+        topics = merge_topics_to_max(topics, args.max_topics)
+        merged_note = ""
+        if args.max_topics > 0 and len(topics) < n_before:
+            merged_note = f" (אוחד מ־{n_before} פרקים)"
     finally:
         doc.close()
 
@@ -718,8 +787,8 @@ def main() -> None:
         "קובץ_pdf": str(pdf_path),
         "מספר_נושאים": len(topics),
         "שאלות_לכל_נושא": 7,
-        "מקור_חלוקת_נושאים": topic_source,
-        "מייצר": "ספייק מקומי — שאלות ממוקדות עקרונות (מאפיינים/רווחים/מחירים/תפקידים); נושאים לפי TOC/סימניות כשאפשר",
+        "מקור_חלוקת_נושאים": topic_source + merged_note,
+        "מייצר": "ספייק מקומי — שאלות יוריסטיות ממשפטים בחומר (מסיחים משאר הנושאים); לשאלות מנוסחות מלאות השתמש ב־llm_mcq.py",
     }
     payload = {"מטא": meta, "נושאים": topics_payload}
     json_path = write_json(args.out, payload)

@@ -19,6 +19,28 @@ python spike_pipeline.py --pdf /Users/antweiss/Downloads/tut.pdf --out ../_bmad-
 
 Defaults: `--pdf` can be omitted if you set `QUIZ_SPIKE_PDF` to an absolute path.
 
+### נושאים: פחות פרקים בחידון
+
+ברירת מחדל: עד **12 נושאים** — ממזגים פרקים סמוכים מתוכן העניינים/Outline (מספר הפרקים המקורי מופיע ב־`מקור_חלוקת_נושאים` כ־`אוחד מ־N פרקים`).
+
+| דגל | משמעות |
+|-----|--------|
+| `--max-topics 12` | תקרה (0 = בלי מיזוג) |
+| `--outline-max-level 2` | עומק בסימניות PDF (1 = ראשי בלבד) |
+| `--text-toc-max-entries 48` | כמה שורות TOC לקרוא מהטקסט |
+
+### שאלות מנוסחות ב־LLM (OpenAI)
+
+הספייק המקורי בונה שאלות **יוריסטיות** ממשפטים בחומר (מהיר, ללא רשת). לשאלות שנכתבות כולן על ידי מודל:
+
+```bash
+export OPENAI_API_KEY=sk-...
+# אופציונלי: export QUIZ_SPIKE_OPENAI_MODEL=gpt-4o-mini
+python llm_mcq.py --pdf /path/to/tut.pdf --out ../_bmad-output/quiz-spike-llm
+```
+
+פלט: אותו `spike_bank.json` + `spike_report.pdf`. אותם דגלי `--max-topics` / outline / TOC כמו ב־`spike_pipeline.py`. דורש רשת ומפתח API.
+
 ### פלט בעברית
 
 - **PDF:** גופן יוניקוד, יישור לימין, `python-bidi` לסדר תצוגה.
@@ -28,8 +50,9 @@ Defaults: `--pdf` can be omitted if you set `QUIZ_SPIKE_PDF` to an absolute path
 
 ## What this proves
 
-- Text extraction and a **first-pass topic split** (heuristic, not semantic).
+- Text extraction and **topic split** from PDF outline, Hebrew TOC in text, or paragraph fallback — with an optional **cap + merge** so the quiz stays navigable.
 - **Deterministic MCQs** grounded on extracted sentences: correct line from the topic; distractors sampled from other topics. **Question stems** are framed around **principles** (עקרון / עיקרון when detected): traits, gains, “prices”, and roles (e.g. שחקן / פרשן / מאמן) when the source sentence or principle mentions involvement — not generic “which matches the topic”.
+- Optional **`llm_mcq.py`**: same topic resolution, **LLM-authored** stems and choices (OpenAI API).
 - **PDF artifact** suitable for an owner demo (label as draft / AI-assisted in the doc header).
 
 ## דמו ווב (בחירת נושא → חידון → ציון)
@@ -57,5 +80,5 @@ cd web && python3 -m http.server 8765
 
 ## Next spike hooks
 
-- Replace `build_mcqs_for_topic` with an LLM call + **frozen bank** JSON schema.
+- Human review / rubric for LLM banks; optional **frozen JSON schema** validation in CI.
 - Add **Google OAuth** and persistence (not in this spike).
