@@ -34,6 +34,7 @@ class MCQ:
     choices: list[str]
     correct_index: int
     source_sentence: str
+    principle_in_stem: str = ""
 
 
 def extract_text_from_document(doc: fitz.Document) -> str:
@@ -493,6 +494,7 @@ def build_mcqs_for_topic(
                 choices=shuffled,
                 correct_index=correct_index,
                 source_sentence=correct[:500],
+                principle_in_stem=principle[:120],
             )
         )
     return mcqs
@@ -623,6 +625,11 @@ def write_pdf(out_dir: Path, meta: dict, topics_payload: list[dict]) -> Path:
         story.append(Spacer(1, 8))
         for idx, q in enumerate(t["שאלות"], start=1):
             story.append(_rtl_paragraph(f"ש{idx}. {q['ניסוח']}", body))
+            pr = (q.get("עקרון_בשאלה") or "").strip()
+            if pr:
+                story.append(
+                    _rtl_paragraph(f"מסגרת עקרון בשאלה: {pr[:200]}", small)
+                )
             for j, c in enumerate(q["אפשרויות"]):
                 label = CHOICE_LABELS[j]
                 line = f"{label}. {c[:800]}"
@@ -697,6 +704,7 @@ def main() -> None:
                 "שאלות": [
                     {
                         "ניסוח": m.stem,
+                        "עקרון_בשאלה": m.principle_in_stem,
                         "אפשרויות": m.choices,
                         "אינדקס_תשובה_נכונה": m.correct_index,
                         "משפט_מקור": m.source_sentence,

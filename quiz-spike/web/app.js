@@ -182,7 +182,16 @@ function renderHome() {
     btn.type = "button";
     const title = t["כותרת"] || id;
     const nq = (t["שאלות"] || []).length;
-    btn.innerHTML = `<span>${escapeHtml(title)}</span><span class="topic-meta">${nq} שאלות · ${escapeHtml(id)}</span>`;
+    const saved = loadQuizProgress(id);
+    const canResume =
+      saved &&
+      saved.bankSig === bankFingerprint() &&
+      saved.answers &&
+      saved.answers.some((a) => a !== undefined);
+    const resumeMark = canResume
+      ? `<span class="topic-resume"> · המשך חידון</span>`
+      : "";
+    btn.innerHTML = `<span>${escapeHtml(title)}</span><span class="topic-meta">${nq} שאלות · ${escapeHtml(id)}${resumeMark}</span>`;
     btn.addEventListener("click", () => startQuiz(idx));
     li.appendChild(btn);
     ul.appendChild(li);
@@ -218,6 +227,15 @@ function renderQuiz() {
   const q = questions[state.qIndex];
   $("quiz-title").textContent = t["כותרת"] || "";
   $("quiz-progress").textContent = `שאלה ${state.qIndex + 1} מתוך ${questions.length}`;
+  const prEl = $("question-principle");
+  const pr = (q["עקרון_בשאלה"] || "").trim();
+  if (pr) {
+    prEl.textContent = `מסגרת עקרון: ${pr}`;
+    prEl.hidden = false;
+  } else {
+    prEl.textContent = "";
+    prEl.hidden = true;
+  }
   $("question-text").textContent = q["ניסוח"] || "";
   const choices = $("choices");
   choices.innerHTML = "";
